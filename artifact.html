@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>بلاگ حلی ۵</title>
+  <style>
+    body { font-family: Tahoma, sans-serif; margin: 0; background:#f4f6fb; color:#222; }
+    .container{ max-width: 980px; margin: 36px auto; padding: 0 14px; }
+    .panel{ background:#fff; border-radius:16px; padding: 22px; box-shadow:0 8px 30px rgba(0,0,0,.08); }
+    h1{ margin:0 0 10px; color:#1f4acc; }
+    .tabs{ display:flex; gap:10px; margin: 14px 0 18px; flex-wrap: wrap; }
+    .tab{ padding:10px 14px; border-radius:10px; border:1px solid #d7dbe7; background:#f9fafc; cursor:pointer; }
+    .tab.active{ background:#1f4acc; color:#fff; border-color:#1f4acc; }
+    .card{ border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-top:14px; background:#fafafa; }
+    input, textarea, button{ width:100%; box-sizing:border-box; margin-top:8px; padding:12px; border-radius:10px; border:1px solid #ccc; font:inherit; }
+    textarea{ min-height: 140px; resize: vertical; }
+    button{ background:#1f4acc; color:white; border:none; cursor:pointer; font-weight:bold; }
+    button:hover{ background:#163a9a; }
+    .row{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 720px){ .row{ grid-template-columns: 1fr; } }
+    .status{ margin-top:10px; font-size:14px; color:#555; }
+    .error{ color:#b00020; }
+    .ok{ color:#0a7a2f; }
+    .post{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-top:12px; }
+    .post h3{ margin:0 0 8px; }
+    .muted{ color:#6b7280; font-size: 13px; }
+    .topbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap: wrap; }
+    .pill{ padding:6px 10px; background:#eef2ff; border-radius:999px; font-size: 13px; color:#1f4acc; border:1px solid #d7ddff; }
+    .smallbtn{ width:auto; padding:10px 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="panel">
+      <div class="topbar">
+        <div>
+          <h1>بلاگ حلی ۵</h1>
+          <div class="muted">مشاهده پست‌ها برای همه، ارسال پست فقط برای ادمین</div>
+        </div>
+        <div class="pill" id="authPill">وضعیت: مهمان</div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-view="posts">پست‌ها</div>
+        <div class="tab" data-view="admin">پنل ادمین</div>
+      </div>
+
+      <div id="view-posts">
+        <div class="card">
+          <button class="smallbtn" onclick="loadPosts()">بارگذاری پست‌ها</button>
+          <div id="posts-container"></div>
+        </div>
+      </div>
+
+      <div id="view-admin" style="display:none">
+        <div class="card">
+          <h2>ورود ادمین</h2>
+          <div class="row">
+            <div>
+              <label>نام کاربری</label>
+              <input id="admin-user" type="text" placeholder="admin" value="admin" />
+            </div>
+            <div>
+              <label>رمز عبور</label>
+              <input id="admin-pass" type="password" placeholder="رمز عبور ادمین" />
+            </div>
+          </div>
+          <button onclick="adminLogin()">ورود</button>
+          <button class="smallbtn" style="background:#6b7280" onclick="adminLogout()">خروج</button>
+          <div id="admin-status" class="status"></div>
+        </div>
+
+        <div class="card">
+          <h2>ارسال پست جدید</h2>
+          <input id="post-title" type="text" placeholder="عنوان پست" />
+          <textarea id="post-content" placeholder="متن پست"></textarea>
+          <button onclick="sendPost()">ثبت پست</button>
+          <div id="post-status" class="status"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SERVER_URL = location.origin;
+
+    const postsContainer = document.getElementById("posts-container");
+    const authPill = document.getElementById("authPill");
+    const adminStatusEl = document.getElementById("admin-status");
+    const postStatusEl = document.getElementById("post-status");
+
+    function setStatus(el, msg, type="") {
+      el.textContent = msg;
+      el.className = "status " + (type === "ok" ? "ok" : type === "error" ? "error" : "");
+    }
+
+    function getToken() {
+      return localStorage.getItem("helli5_admin_token") || "";
+    }
+
+    function setToken(token) {
+      if (token) {
+        localStorage.setItem("helli5_admin_token", token);
+      } else {
+        localStorage.removeItem("helli5_admin_token");
+      }
+      updateAuthUI();
+    }
+
+    function updateAuthUI() {
+      authPill.textContent = getToken() ? "وضعیت: ادمین وارد شده" : "وضعیت: مهمان";
+    }
+
+    async function adminLogin() {
+      try {
+        setStatus(adminStatusEl, "در حال ورود...");
+        const username = document.getElementById("admin-user").value.trim();
+        const password = document.getElementById("admin-pass").value;
+
+        const res = await fetch(`${SERVER_URL}/admin/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        setToken(data.token);
+        setStatus(adminStatusEl, "ورود موفق بود.", "ok");
+      } catch (err) {
+        setToken("");
+        setStatus(adminStatusEl, "خطا در ورود: " + err.message, "error");
+      }
+    }
+
+    function adminLogout() {
+      setToken("");
+      setStatus(adminStatusEl, "خروج انجام شد.", "ok");
+    }
+
+    async function sendPost() {
+      const token = getToken();
+
+      if (!token) {
+        setStatus(postStatusEl, "اول باید وارد پنل ادمین شوی.", "error");
+        return;
+      }
+
+      const title = document.getElementById("post-title").value.trim();
+      const text = document.getElementById("post-content").value.trim();
+
+      if (!title || !text) {
+        setStatus(postStatusEl, "عنوان و متن پست را وارد کن.", "error");
+        return;
+      }
+
+      try {
+        setStatus(postStatusEl, "در حال ثبت پست...");
+        const res = await fetch(`${SERVER_URL}/admin/add_post`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({ title, text })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        document.getElementById("post-title").value = "";
+        document.getElementById("post-content").value = "";
+        setStatus(postStatusEl, "پست با موفقیت ثبت شد.", "ok");
+        loadPosts();
+      } catch (err) {
+        setStatus(postStatusEl, "خطا در ثبت پست: " + err.message, "error");
+      }
+    }
+
+    async function loadPosts() {
+      try {
+        postsContainer.innerHTML = "<p>در حال بارگذاری...</p>";
+
+        const res = await fetch(`${SERVER_URL}/get_posts`);
+        const posts = await res.json().catch(() => []);
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        if (!Array.isArray(posts) || posts.length === 0) {
+          postsContainer.innerHTML = "<p>هنوز پستی ثبت نشده است.</p>";
+          return;
+        }
+
+        posts.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+        postsContainer.innerHTML = posts.map(post => `
+          <div class="post">
+            <h3>${escapeHtml(post.title || "")}</h3>
+            <div class="muted">${post.ts ? new Date(post.ts * 1000).toLocaleString("fa-IR") : ""}</div>
+            <p>${escapeHtml(post.text || "").replace(/\n/g, "<br>")}</p>
+          </div>
+        `).join("");
+      } catch (err) {
+        postsContainer.innerHTML = `<p class="error">خطا در بارگذاری پست‌ها: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const view = tab.dataset.view;
+        document.getElementById("view-posts").style.display = view === "posts" ? "" : "none";
+        document.getElementById("view-admin").style.display = view === "admin" ? "" : "none";
+      });
+    });
+
+    updateAuthUI();
+    loadPosts();
+  </script>
+</body>
+</html>
